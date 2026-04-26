@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // Check if user is owner of company
+    function isCompanyOwner(companyId) {
+      return isVerified() && get(/databases/$(database)/documents/companies/$(companyId)).data.ownerEmail == request.auth.token.email;
+    }
+
+    // --- Companies ---
+    match /companies/{companyId} {
+      allow get: if isVerified();
+      allow list: if isVerified() && resource.data.ownerEmail == request.auth.token.email;
+      allow create: if isVerified() 
+        && incoming().ownerEmail == request.auth.token.email
+        && incoming().name is string && incoming().name.size() <= 100
+        && incoming().businessType is string;
+      allow update: if isVerified() 
+        && existing().ownerEmail == request.auth.token.email
+        && incoming().ownerEmail == existing().ownerEmail;
+    }
+
+    // --- Master Templates ---
+    match /companies/{companyId}/templates/{templateId} {
+      allow read: if isVerified() && isCompanyOwner(companyId);
+      allow create: if isVerified() && isCompanyOwner(companyId) && isValidTemplate(incoming());
+      allow update: if false; // Templates are immutable versions
+    }
+
+    function isValidTemplate(data) {
+      return data.companyId is string
+        && data.fields is list
+        && data.fields.size() <= 50;
+    }
+
+    // --- Employees ---
+    match /companies/{companyId}/employees/{employeeId} {
+      allow read: if isVerified() && isCompanyOwner(companyId);
+      allow create: if isVerified() && isCompanyOwner(companyId) && isValidEmployee(incoming());
+      allow update: if isVerified() && isCompanyOwner(companyId) && isValidEmployee(incoming());
+      allow delete: if isVerified() && isCompanyOwner(companyId);
+    }
+
+    function isValidEmployee(data) {
+      return data.companyId is string
+        && data.templateId is string
+        && data.data is map;
+    }
+  }
+}

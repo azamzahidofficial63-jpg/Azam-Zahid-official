@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "description": "Stores company profiles and their current master template selection.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "businessType": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "currentTemplateId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "businessType", "ownerEmail"]
+    },
+    "MasterTemplate": {
+      "title": "Master Template",
+      "description": "Defines the dynamic field structure for a company's employee records.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "version": { "type": "number" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "type": { "enum": ["text", "number", "date", "dropdown", "file", "boolean", "email", "phone"] },
+              "required": { "type": "boolean" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "order": { "type": "number" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "fields"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Individiual employee record with dynamic data stored in a flexible data object.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "data": {
+          "type": "object",
+          "description": "Key-value pairs matching field IDs from the MasterTemplate."
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "templateId", "data"]
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Root collection for company profiles."
+    },
+    "/companies/{companyId}/templates/{templateId}": {
+      "schema": "MasterTemplate",
+      "description": "Subcollection for storing versions of master data structures."
+    },
+    "/companies/{companyId}/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Subcollection for storing employee records under a specific company."
+    }
+  }
+}

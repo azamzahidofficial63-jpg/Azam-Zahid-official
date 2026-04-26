@@ -1,0 +1,44 @@
+// DRAFT RULES - Phase 4
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if false; }
+
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // Master Gate
+    function isCompanyMember(companyId) {
+      return isVerified() && get(/databases/$(database)/documents/companies/$(companyId)).data.ownerEmail == request.auth.token.email;
+    }
+
+    match /companies/{companyId} {
+      allow get: if isVerified();
+      allow list: if isVerified() && resource.data.ownerEmail == request.auth.token.email;
+      allow create: if isVerified() && incoming().ownerEmail == request.auth.token.email;
+      allow update: if isVerified() && existing().ownerEmail == request.auth.token.email && incoming().ownerEmail == existing().ownerEmail;
+    }
+
+    match /companies/{companyId}/templates/{templateId} {
+      allow read: if isCompanyMember(companyId);
+      allow create: if isCompanyMember(companyId) && isValidTemplate(incoming());
+    }
+
+    function isValidTemplate(data) {
+      return data.companyId is string && data.fields is list;
+    }
+
+    match /companies/{companyId}/employees/{employeeId} {
+      allow read: if isCompanyMember(companyId);
+      allow create, update: if isCompanyMember(companyId) && isValidEmployee(incoming());
+      allow delete: if isCompanyMember(companyId);
+    }
+
+    function isValidEmployee(data) {
+      return data.companyId is string && data.data is map;
+    }
+  }
+}
